@@ -2,15 +2,12 @@
 
 import { useRef, useState } from "react";
 import { refineDiagnosis } from "@/lib/api";
-import type { DiagnoseResponse, PredictionItem, RecaptureGuidance } from "@/types/diagnosis";
-import { LeafIllustration } from "./LeafIllustration";
+import type { DiagnoseResponse, RecaptureGuidance } from "@/types/diagnosis";
 
 interface Props {
   diagnosisId: string;
   guidance: RecaptureGuidance;
-  topPredictions: PredictionItem[];
   onRefined: (result: DiagnoseResponse) => void;
-  onSkip: () => void;
 }
 
 /** 받침 유무로 목적격 조사를 고른다 ("잎 뒷면" → 을, "잎맥·잎 가장자리" → 를). */
@@ -21,22 +18,10 @@ function objectParticle(word: string): string {
   return (last - 0xac00) % 28 === 0 ? "를" : "을";
 }
 
-/**
- * 혼동쌍 재촬영 유도 — 이 앱만의 장면.
- * 두 후보를 한 막대로 견주고, 잎 일러스트에 "어디를 봐야 하는지"를 표시한 뒤 한 가지 행동만 남긴다.
- */
-export function RecapturePanel({ diagnosisId, guidance, topPredictions, onRefined, onSkip }: Props) {
+export function RecapturePanel({ diagnosisId, guidance, onRefined }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // 후보 2개의 확률 — top_predictions에서 이름으로 찾는다
-  const pair = guidance.candidates.slice(0, 2).map((c) => ({
-    ...c,
-    pct: Math.round((topPredictions.find((p) => p.name === c.name)?.confidence ?? 0) * 100),
-  }));
-  const [a, b] = pair;
-  const sum = (a?.pct ?? 0) + (b?.pct ?? 0);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,99 +29,75 @@ export function RecapturePanel({ diagnosisId, guidance, topPredictions, onRefine
     setLoading(true);
     setError(null);
     try {
-      onRefined(await refineDiagnosis(diagnosisId, file));
+      const refined = await refineDiagnosis(diagnosisId, file);
+      onRefined(refined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "다시 확인하지 못했어요. 한 번 더 시도해 주세요.");
+      setError(err instanceof Error ? err.message : "재확정에 실패했어요. 다시 시도해 주세요.");
     } finally {
       setLoading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   };
 
-  const region = guidance.region;
-  const isBack = region.includes("뒷면");
-
   return (
-    <section className="flex min-h-[calc(100vh-8rem)] flex-col px-5 pt-3 md:min-h-0">
-      <p className="flex items-center gap-1.5 text-base font-bold text-ink">
-        <span aria-hidden className="icon-[lucide--scan-search] h-5 w-5 text-khaki" />
-        한 번만 더 볼게요
-      </p>
-      <h2 className="mt-4 text-2xl font-black leading-[1.35] tracking-tight text-ink">
-        둘 중 하나예요.
-        <br />
-        {region}
-        {objectParticle(region)} 보면 알 수 있어요
-      </h2>
-
-      {a && b && sum > 0 && (
-        <div className="mt-5 flex h-12 overflow-hidden rounded-xl bg-line text-sm font-bold text-white tnum" role="img" aria-label={`${a.name} ${a.pct}%, ${b.name} ${b.pct}%`}>
-          <span className="flex items-center bg-photo-spot pl-3.5" style={{ width: `${a.pct}%` }}>
-            <span className="truncate">{a.name} {a.pct}%</span>
-          </span>
-          <span className="flex items-center bg-photo-leaf pl-3" style={{ width: `${b.pct}%` }}>
-            <span className="truncate">{b.name} {b.pct}%</span>
-          </span>
-        </div>
-      )}
-
-      <div className="mt-5 flex flex-col items-center">
-        <LeafIllustration variant={isBack ? "back-highlight" : "front"} className="h-52 w-52" />
-        <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-khaki">
-          <span aria-hidden className="icon-[lucide--flip-horizontal] h-4 w-4" />
-          {guidance.instruction}
-        </p>
+    <section className="rounded-card border border-signal-med/30 bg-signal-med-tint p-5">
+      <div className="flex items-center gap-2">
+        <span aria-hidden className="icon-[lucide--scan-search] h-5 w-5 text-signal-med-ink" />
+        <h3 className="text-base font-extrabold text-ink">한 장 더 찍어볼까요?</h3>
       </div>
+      <p className="mt-1.5 text-sm leading-relaxed text-ink/80">
+        두 병해가 비슷해 보여요. <b className="font-bold">{guidance.region}</b>
+        {objectParticle(guidance.region)} 찍으면 구분하는 데 도움이 돼요.
+      </p>
 
-      <ul className="mt-5 space-y-2.5">
-        {pair.map((c, i) => (
-          <li key={c.name} className="flex items-center gap-2.5 text-base text-ink">
-            <span aria-hidden className={`h-3.5 w-3.5 shrink-0 rounded-[3px] ${i === 0 ? "bg-photo-spot" : "bg-photo-leaf"}`} />
-            {c.cue}
-          </li>
-        ))}
-      </ul>
+      <p className="mt-3 rounded-xl bg-surface/70 px-3.5 py-2.5 text-sm font-semibold text-ink">
+        {guidance.instruction}
+      </p>
+
+      {guidance.candidates.length > 0 && (
+        <ul className="mt-3 space-y-1.5">
+          {guidance.candidates.map((c) => (
+            <li key={c.name} className="flex gap-2 text-xs leading-relaxed text-ink/75">
+              <span aria-hidden className="icon-[lucide--corner-down-right] mt-0.5 h-3.5 w-3.5 shrink-0 text-signal-med-ink" />
+              <span>{c.cue}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {error && (
-        <p className="mt-4 rounded-xl bg-signal-high-tint px-4 py-3 text-sm font-semibold text-signal-high-ink">{error}</p>
+        <p className="mt-3 rounded-xl bg-signal-high-tint px-3.5 py-2.5 text-sm font-medium text-signal-high-ink">
+          {error}
+        </p>
       )}
 
-      <div className="mt-auto pb-6 pt-8">
-        <label
-          htmlFor="recapture-photo"
-          aria-disabled={loading}
-          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-base font-bold text-ink shadow-cta transition active:scale-[0.99] aria-disabled:opacity-60"
-        >
-          {loading ? (
-            <>
-              <span aria-hidden className="icon-[lucide--loader-circle] h-5 w-5 animate-spin" />
-              확인하는 중…
-            </>
-          ) : (
-            <>
-              <span aria-hidden className="icon-[lucide--camera] h-5 w-5" />
-              {region} 찍기
-            </>
-          )}
-          <input
-            ref={fileRef}
-            id="recapture-photo"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileChange}
-            disabled={loading}
-            className="hidden"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={onSkip}
-          className="mt-3 w-full text-center text-sm font-semibold text-khaki underline underline-offset-4"
-        >
-          지금 결과로 볼게요
-        </button>
-      </div>
+      <label
+        htmlFor="recapture-photo"
+        className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 text-base font-bold text-ink shadow-cta transition active:scale-[0.99] hover:bg-brand-deep aria-disabled:opacity-60"
+        aria-disabled={loading}
+      >
+        {loading ? (
+          <>
+            <span aria-hidden className="icon-[lucide--loader-circle] h-5 w-5 animate-spin" />
+            분석 중…
+          </>
+        ) : (
+          <>
+            <span aria-hidden className="icon-[lucide--camera] h-5 w-5" />
+            {guidance.region} 촬영하기
+          </>
+        )}
+        <input
+          ref={fileRef}
+          id="recapture-photo"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileChange}
+          disabled={loading}
+          className="hidden"
+        />
+      </label>
     </section>
   );
 }

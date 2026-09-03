@@ -32,14 +32,6 @@ module.exports = {
         // Each has a fill colour (dots, borders) and an -ink colour for text and
         // icons. The fills keep the original hue; the -ink values are darkened to
         // clear 4.5:1 on their own tint background.
-        // 사진 톤 — 잎 일러스트·뷰파인더·썸네일 배경 (v2 디자인)
-        photo: {
-          deep: "#1E3326",
-          leaf: "#4C7A3F",
-          "leaf-light": "#8DB36A",
-          spot: "#7A4A2A",
-          scrim: "#0F1A12",
-        },
         signal: {
           low: "#5E8C4F",
           "low-ink": "#4F7542",
@@ -71,8 +63,6 @@ module.exports = {
       boxShadow: {
         card: "0 1px 2px rgba(61,47,26,0.05), 0 6px 20px -14px rgba(61,47,26,0.18)",
         cta: "0 8px 18px -10px rgba(245,179,1,0.7)",
-        sheet: "0 -8px 24px -12px rgba(61,47,26,0.25)",
-        shutter: "0 10px 24px -10px rgba(61,47,26,0.45)",
       },
       maxWidth: {
         app: "30rem",
