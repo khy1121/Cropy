@@ -1,0 +1,54 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    /* keep text size stable when phones rotate to landscape */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+
+    /* 큰글씨 모드의 기준점.
+       Tailwind의 글자·여백·크기 유틸은 모두 rem이므로 루트 크기 하나만 키우면
+       본문뿐 아니라 버튼 높이와 터치 영역까지 비례해 함께 커진다.
+       (그래서 코드에는 하드코딩 px 값을 두지 않는다) */
+    font-size: 100%;
+  }
+  html[data-textsize="large"] {
+    font-size: 125%;
+  }
+  body {
+    @apply bg-paper text-ink antialiased;
+  }
+  /* remove double-tap zoom delay on touch devices */
+  a,
+  button,
+  label,
+  input {
+    touch-action: manipulation;
+  }
+  /* data figures (dilution ratios, days, dates) align in columns */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* horizontal swipe rows (crop chips) scroll without a visible bar */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
