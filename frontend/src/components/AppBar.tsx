@@ -9,31 +9,39 @@ const NAV = [
   { href: "/history", label: "이력", match: (p: string) => p.startsWith("/history") },
 ];
 
+/**
+ * 상단 바. 홈은 워드마크만, 하위 화면은 뒤로가기 + 제목.
+ * 큰글씨 토글은 어디서나 같은 자리에 둔다(어르신이 한 번 찾으면 계속 찾을 수 있게).
+ */
 export function AppBar() {
   const pathname = usePathname();
+  const isDetail = /^\/history\/.+/.test(pathname);
+  const title = pathname.startsWith("/history") ? (isDetail ? "진단 기록" : "진단 이력") : null;
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-paper/85 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="flex items-center gap-2.5 px-5 py-3.5 md:px-8">
-        <Link href="/" className="flex items-center gap-2.5">
-          <span
-            aria-hidden
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-tint text-brown"
-          >
-            <span className="icon-[lucide--sprout] h-5 w-5" />
-          </span>
-          <span className="leading-none">
-            <span className="block text-lg font-extrabold tracking-tight text-ink">CropCare</span>
-            <span className="mt-0.5 block text-xs font-medium text-khaki">현장 병해충 진단</span>
-          </span>
-        </Link>
+    <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <div className="flex items-center gap-2 px-5 py-3 md:px-8">
+        {title ? (
+          <div className="flex items-center gap-1.5">
+            {isDetail && (
+              <Link
+                href="/history"
+                aria-label="이력 목록으로"
+                className="-ml-2 flex h-11 w-11 items-center justify-center rounded-full text-ink transition hover:bg-khaki-tint"
+              >
+                <span aria-hidden className="icon-[lucide--chevron-left] h-6 w-6" />
+              </Link>
+            )}
+            <span className="text-lg font-extrabold tracking-tight text-ink">{title}</span>
+          </div>
+        ) : (
+          <Link href="/" className="text-xl font-black tracking-tight text-ink">
+            CropCare
+          </Link>
+        )}
 
-        {/* 큰글씨 토글은 화면 폭과 무관하게 항상 보여야 한다 (모바일에서 하단 탭이
-            네비게이션을 가져가도 이 버튼은 앱바에 남는다) */}
         <div className="ml-auto flex items-center gap-2">
           <TextSizeToggle />
-
-          {/* Desktop nav — bottom tabs take over below md */}
           <nav className="hidden items-center gap-1.5 md:flex">
             {NAV.map((item) => {
               const active = item.match(pathname);

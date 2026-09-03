@@ -1,196 +1,286 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { diagnoseImage } from "@/lib/api";
+import { onCaptureRequest, type CaptureMode } from "@/lib/capture";
 import type { DiagnoseResponse } from "@/types/diagnosis";
 import { DiagnosisResult } from "./DiagnosisResult";
 import { RecapturePanel } from "./RecapturePanel";
+import { RecentDiagnoses } from "./RecentDiagnoses";
+import { LeafIllustration } from "./LeafIllustration";
 
-const CROP_TYPES = [
-  { value: "", label: "자동 감지", icon: "✨" },
-  { value: "고추", label: "고추", icon: "🌶️" },
-  { value: "무", label: "무", icon: "🌱" },
-  { value: "배추", label: "배추", icon: "🥬" },
-];
+const CROPS = ["고추", "무", "배추"] as const;
 
-const PHOTO_TIPS = [
-  "잎이나 과실 전체가 화면에 들어오게 찍어주세요",
-  "그늘보다 밝은 자연광 아래가 정확해요",
-  "병반(얼룩·반점)이 또렷하게 초점을 맞춰주세요",
-];
+// top-1이 이 아래면 잎이 잘 안 잡힌 사진일 가능성이 높다 — 결과보다 다시 찍기를 먼저 권한다
+const LOW_CONFIDENCE = 0.5;
+
+type Stage = "home" | "preview" | "loading" | "result";
 
 export function DiagnoseForm() {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const resultRef = useRef<HTMLDivElement>(null);
-  const [cropType, setCropType] = useState("");
+  const searchParams = useSearchParams();
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const albumRef = useRef<HTMLInputElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  const [cropType, setCropType] = useState<string>("");
+  const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [stage, setStage] = useState<Stage>("home");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DiagnoseResponse | null>(null);
+  const [skipRecapture, setSkipRecapture] = useState(false);
+  const [acceptLow, setAcceptLow] = useState(false);
 
-  // on phones the result renders below the fold — bring it into view
+  const open = useCallback((mode: CaptureMode) => {
+    (mode === "camera" ? cameraRef : albumRef).current?.click();
+  }, []);
+
+  // 하단 셔터 바에서 온 요청
+  useEffect(() => onCaptureRequest(open), [open]);
+
+  // 홈이 아닌 단계에서는 하단 셔터 바를 숨긴다 (globals.css)
   useEffect(() => {
-    if (!result) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    resultRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
-  }, [result]);
+    document.documentElement.dataset.fullscreen = stage === "home" ? "" : "1";
+    return () => {
+      document.documentElement.dataset.fullscreen = "";
+    };
+  }, [stage]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPreview(URL.createObjectURL(file));
+  // 다른 화면의 셔터를 눌러 /?capture=1 로 왔을 때는 제스처가 끊겨 카메라를 바로 열 수 없다.
+  // 대신 촬영 카드로 시선을 옮긴다.
+  useEffect(() => {
+    if (searchParams.get("capture")) topRef.current?.scrollIntoView({ block: "start" });
+  }, [searchParams]);
+
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (preview) URL.revokeObjectURL(preview);
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
     setResult(null);
     setError(null);
+    setSkipRecapture(false);
+    setAcceptLow(false);
+    setStage("preview");
+    e.target.value = "";
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setError("먼저 사진을 촬영하거나 선택하세요.");
-      return;
-    }
+  const reset = () => {
+    if (preview) URL.revokeObjectURL(preview);
+    setFile(null);
+    setPreview(null);
+    setResult(null);
+    setError(null);
+    setStage("home");
+  };
 
-    setLoading(true);
+  const submit = async () => {
+    if (!file) return;
+    setStage("loading");
     setError(null);
     try {
       const data = await diagnoseImage(file, cropType || undefined);
       setResult(data);
+      setStage("result");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "진단에 실패했습니다. 잠시 후 다시 시도하세요.");
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : "진단에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setStage("preview");
     }
   };
 
-  return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-8">
-      <form onSubmit={handleSubmit}>
-        {/* Capture card — the hero of this screen */}
-        <label
-          htmlFor="photo"
-          className={`group block aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-card transition ${
-            preview
-              ? "border border-line bg-surface"
-              : "border-2 border-dashed border-khaki/35 bg-surface hover:border-brand/60"
-          }`}
-        >
-          {preview ? (
-            <span className="relative block h-full w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={preview} alt="촬영한 작물 미리보기" className="h-full w-full object-cover" />
-              <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-ink/75 px-3.5 py-1.5 text-xs font-bold text-white backdrop-blur">
-                다시 촬영하기
-              </span>
-            </span>
-          ) : (
-            <span className="flex h-full flex-col items-center justify-center px-6 text-center">
-              <span className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-brand text-ink shadow-cta transition group-hover:scale-105">
-                <span className="icon-[lucide--camera] h-7 w-7" />
-              </span>
-              <span className="text-base font-bold text-ink">사진 촬영 또는 업로드</span>
-              <span className="mt-1 text-xs text-khaki">잎·과실이 선명하게 보이도록 찍어주세요</span>
-            </span>
-          )}
-          <input
-            ref={fileRef}
-            id="photo"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileChange}
-            className="hidden"
+  const inputs = (
+    <>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={pick} className="hidden" aria-hidden />
+      <input ref={albumRef} type="file" accept="image/*" onChange={pick} className="hidden" aria-hidden />
+    </>
+  );
+
+  /* ---------- 진단 중 ---------- */
+  if (stage === "loading") {
+    return (
+      <div className="flex min-h-[70vh] flex-col items-center justify-center text-center" role="status" aria-live="polite">
+        <span aria-hidden className="icon-[lucide--loader-circle] h-14 w-14 animate-spin text-brand" />
+        <p className="mt-5 text-2xl font-extrabold text-ink">진단 중…</p>
+        <p className="mt-1 text-base text-khaki">잎을 살펴보고 있어요</p>
+        {inputs}
+      </div>
+    );
+  }
+
+  /* ---------- 결과 ---------- */
+  if (stage === "result" && result) {
+    const lowConfidence = result.confidence < LOW_CONFIDENCE && result.category !== "normal" && !acceptLow;
+    const showRecapture = Boolean(result.recapture) && !skipRecapture && !lowConfidence;
+    return (
+      <div className="-mx-5 -mt-5 md:mx-0 md:mt-0">
+        {inputs}
+        {lowConfidence ? (
+          <LowConfidence
+            preview={result.image_url ?? preview}
+            pct={Math.round(result.confidence * 100)}
+            onRetake={() => open("camera")}
+            onAccept={() => setAcceptLow(true)}
           />
-        </label>
-
-        {/* Crop selector — 항상 줄바꿈해 모든 작물이 보이게 한다.
-            가로 스와이프 행이면 좁은 화면이나 큰글씨 모드에서 마지막 작물이 잘리는데,
-            스크롤바를 숨겨둔 탓에 더 있다는 단서조차 없다. 선택지가 셋뿐이라
-            접어두는 이득보다 놓치는 위험이 크다. */}
-        <div
-          role="group"
-          aria-label="작물 선택"
-          className="mt-4 flex flex-wrap items-center gap-2"
-        >
-          <span aria-hidden className="shrink-0 text-sm font-bold text-ink">
-            작물
-          </span>
-          {CROP_TYPES.map((c) => {
-            const active = cropType === c.value;
-            return (
-              <button
-                key={c.value || "auto"}
-                type="button"
-                onClick={() => setCropType(c.value)}
-                aria-pressed={active}
-                className={`inline-flex min-h-12 shrink-0 items-center gap-1 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${
-                  active
-                    ? "border-brand bg-brand text-ink"
-                    : "border-line bg-surface text-muted hover:border-brand/50 hover:text-ink"
-                }`}
-              >
-                <span aria-hidden>{c.icon}</span>
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {error && (
-          <p className="mt-3 rounded-xl bg-signal-high-tint px-3.5 py-2.5 text-sm font-medium text-signal-high-ink">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-base font-bold text-ink shadow-cta transition active:scale-[0.99] hover:bg-brand-deep disabled:opacity-60"
-        >
-          {loading ? (
-            <>
-              <span aria-hidden className="icon-[lucide--loader-circle] h-5 w-5 animate-spin" />
-              진단 중…
-            </>
-          ) : (
-            "AI 진단 시작"
-          )}
-        </button>
-      </form>
-
-      {/* Right column on desktop, below the form on phones */}
-      <div ref={resultRef} className={`scroll-mt-20 lg:mt-0 ${result ? "mt-6" : ""}`}>
-        {result ? (
-          <div className="space-y-4">
-            {result.recapture && (
-              <RecapturePanel
-                diagnosisId={result.id}
-                guidance={result.recapture}
-                onRefined={setResult}
-              />
-            )}
-            <DiagnosisResult result={result} />
-          </div>
+        ) : showRecapture ? (
+          <RecapturePanel
+            diagnosisId={result.id}
+            guidance={result.recapture!}
+            topPredictions={result.top_predictions}
+            onRefined={(r) => {
+              setResult(r);
+              setSkipRecapture(true);
+            }}
+            onSkip={() => setSkipRecapture(true)}
+          />
         ) : (
-          <aside className="hidden rounded-card border border-line bg-surface p-5 shadow-card lg:block">
-            <h4 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-khaki">
-              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-brand" />
-              좋은 사진 촬영 팁
-            </h4>
-            <ul className="space-y-2.5">
-              {PHOTO_TIPS.map((tip) => (
-                <li key={tip} className="flex gap-2 text-sm text-ink/80">
-                  <span aria-hidden className="icon-[lucide--check] mt-0.5 h-4 w-4 shrink-0 text-brand-ink" />
-                  {tip}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-4 rounded-xl bg-brand-tint px-3.5 py-2.5 text-xs leading-relaxed text-brown-deep">
-              사진을 올리고 진단을 시작하면 결과가 이 자리에 표시됩니다.
-            </p>
-          </aside>
+          <DiagnosisResult result={result} onNew={reset} />
         )}
       </div>
+    );
+  }
+
+  /* ---------- 사진 확인 ---------- */
+  if (stage === "preview" && preview) {
+    return (
+      <div className="-mx-5 -mt-5 flex min-h-[calc(100vh-8rem)] flex-col bg-photo-deep text-white md:mx-0 md:mt-0 md:min-h-0 md:rounded-card">
+        {inputs}
+        <div className="flex items-center justify-between px-5 pt-4">
+          <button type="button" onClick={reset} aria-label="취소" className="flex h-11 w-11 items-center justify-center rounded-full">
+            <span aria-hidden className="icon-[lucide--x] h-6 w-6" />
+          </button>
+          <CropPicker value={cropType} onChange={setCropType} dark />
+          <span className="w-11" />
+        </div>
+        <div className="relative mx-5 mt-3 min-h-[24rem] flex-1 overflow-hidden rounded-[2rem] bg-photo-leaf/60">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt="촬영한 잎" className="absolute inset-0 h-full w-full object-cover" />
+        </div>
+        {error && (
+          <p className="mx-5 mt-3 rounded-xl bg-signal-high-tint px-4 py-3 text-sm font-semibold text-signal-high-ink">{error}</p>
+        )}
+        <div className="flex gap-3 px-5 pb-6 pt-4">
+          <button
+            type="button"
+            onClick={() => open("camera")}
+            className="flex-1 rounded-2xl border border-white/30 py-4 text-base font-bold text-white transition active:scale-[0.99]"
+          >
+            다시 찍기
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            className="flex-1 rounded-2xl bg-brand py-4 text-base font-bold text-ink shadow-cta transition active:scale-[0.99]"
+          >
+            진단하기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- 홈 ---------- */
+  return (
+    <div ref={topRef} className="space-y-8 scroll-mt-20">
+      {inputs}
+      <section>
+        <h1 className="text-[1.75rem] font-black leading-[1.3] tracking-tight text-ink md:text-[2rem]">
+          잎을 찍으면
+          <br />
+          병과 약을 알려드려요
+        </h1>
+        <p className="mt-2 text-base font-medium text-khaki">고추, 무, 배추 잎을 진단할 수 있어요</p>
+      </section>
+
+      <CropPicker value={cropType} onChange={setCropType} />
+
+      <button
+        type="button"
+        onClick={() => open("camera")}
+        className="hidden w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-base font-bold text-ink shadow-cta transition hover:bg-brand-deep md:flex"
+      >
+        <span aria-hidden className="icon-[lucide--camera] h-5 w-5" />
+        잎 사진 찍기
+      </button>
+
+      <RecentDiagnoses />
+    </div>
+  );
+}
+
+/** 작물 타일. 다시 누르면 해제되어 자동 감지로 돌아간다. */
+function CropPicker({ value, onChange, dark = false }: { value: string; onChange: (v: string) => void; dark?: boolean }) {
+  if (dark) {
+    return (
+      <div role="group" aria-label="작물" className="flex gap-1.5 rounded-full bg-photo-scrim/85 p-1">
+        {CROPS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={value === c}
+            onClick={() => onChange(value === c ? "" : c)}
+            className={`rounded-full px-3.5 py-2 text-sm font-bold transition ${value === c ? "bg-brand text-ink" : "text-white/85"}`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div role="group" aria-label="작물 선택" className="grid grid-cols-3 gap-3">
+      {CROPS.map((c) => {
+        const on = value === c;
+        return (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(on ? "" : c)}
+            className={`flex flex-col items-center gap-2 rounded-[1.25rem] border pb-3.5 pt-4 transition active:scale-[0.98] ${
+              on ? "border-brand bg-brand-tint ring-1 ring-brand" : "border-line bg-surface hover:border-brand/50"
+            }`}
+          >
+            <LeafIllustration className="h-14 w-14" />
+            <span className="text-base font-bold text-ink">{c}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 잎이 잘 안 잡힌 사진 — 결과 대신 다시 찍기를 먼저 권한다. */
+function LowConfidence({ preview, pct, onRetake, onAccept }: { preview: string | null; pct: number; onRetake: () => void; onAccept: () => void }) {
+  return (
+    <div className="px-5 pt-5">
+      {preview && (
+        <div className="overflow-hidden rounded-[1.5rem] bg-photo-leaf-light">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt="촬영한 잎" className="h-48 w-full object-cover" />
+        </div>
+      )}
+      <section className="mt-4 rounded-[1.25rem] border border-brand bg-brand-tint p-4">
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="icon-[lucide--triangle-alert] h-6 w-6 text-signal-med-ink" />
+          <h2 className="text-2xl font-extrabold text-ink">잎이 잘 안 보여요</h2>
+        </div>
+        <p className="mt-2 text-base leading-relaxed text-ink">
+          사진에서 잎을 찾기 어려워 확신이 낮아요(확신 {pct}%). 잎 한 장이 화면에 꽉 차게, 그늘에서 다시 찍어주세요.
+        </p>
+        <button
+          type="button"
+          onClick={onRetake}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-base font-bold text-ink shadow-cta"
+        >
+          <span aria-hidden className="icon-[lucide--camera] h-5 w-5" />
+          다시 찍기
+        </button>
+        <button type="button" onClick={onAccept} className="mt-3 w-full text-center text-sm font-semibold text-khaki underline underline-offset-4">
+          이 결과 그대로 보기
+        </button>
+      </section>
     </div>
   );
 }

@@ -41,6 +41,11 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+  /* 사진 확인·진단 중·결과처럼 화면을 통째로 쓰는 단계에서는 하단 셔터 바를 숨긴다.
+     (결과 화면은 자체 고정 CTA를 가진다) */
+  html[data-fullscreen="1"] .bottom-nav {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
