@@ -1,0 +1,23 @@
+# CPU 전용 PyTorch 휠 저장소.
+# PyPI의 torch는 CUDA 빌드라 수 GB에 달한다. 이 서비스는 CPU 추론만 하므로
+# +cpu 빌드를 쓴다 (이미지 크기 약 200MB 대 2GB+).
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+pydantic==2.10.3
+pydantic-settings==2.7.0
+python-multipart==0.0.20
+pillow==11.0.0
+aiofiles==24.1.0
+
+# 추론 — 없으면 백엔드가 조용히 Mock 모드로 동작한다 (/health의 model_loaded로 확인)
+torch==2.12.1+cpu
+torchvision==0.27.1+cpu
+
+# scripts/sync_pesticides.py (PSIS 동기화)에서 사용
+httpx==0.28.1
+
+# test
+pytest==9.1.1
