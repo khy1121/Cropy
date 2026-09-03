@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Database & uploads
+*.db
+backend/uploads/
+ml/checkpoints/*.pth
+
+# Env
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (large files)
+data/dataset/
+
+# Data (전체 — 학습 원본·가공 데이터는 저장소에 올리지 않음)
+data/
+
+# ML 대용량 산출물
+ml/checkpoints/
+ml/colab_bundle.zip
+
+# Build/test artifacts
+.pytest_cache/
+tsconfig.tsbuildinfo
+
+# Claude Code
+.claude/
