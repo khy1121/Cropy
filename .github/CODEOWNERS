@@ -2,20 +2,20 @@
 # 팀원 GitHub 아이디 확정 후 @placeholder 를 실제 아이디로 교체할 것.
 # 아래 순서에서 뒤쪽 규칙이 앞쪽 규칙보다 우선한다.
 
-# PM · 모델
+# PM · 모델 (김헌영)
 /ml/                              @khy1121
 
-# 백엔드
+# 백엔드 (박성호)
 /backend/                         @backend-owner
 
-# 프론트엔드
+# 프론트엔드 (김민서)
 /frontend/                        @frontend-owner
 
-# 카메라 · 음성 (프론트 하위 폴더, 프론트 규칙보다 우선)
+# 카메라 · 음성 (고명준, 프론트 하위 폴더, 프론트 규칙보다 우선)
 /frontend/src/features/camera/    @camera-voice-owner
 /frontend/src/features/voice/     @camera-voice-owner
 
-# 디바이스 · 인프라
+# 디바이스 · 인프라 (이서하)
 /device/                          @device-infra-owner
 /docker-compose.yml               @device-infra-owner
 /.github/                         @device-infra-owner @khy1121
