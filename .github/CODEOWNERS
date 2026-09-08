@@ -1,0 +1,24 @@
+# 코드 소유권 (docs/msp/03_프로젝트_기획서_초안.md 6-3 참고)
+# 팀원 GitHub 아이디 확정 후 @placeholder 를 실제 아이디로 교체할 것.
+# 아래 순서에서 뒤쪽 규칙이 앞쪽 규칙보다 우선한다.
+
+# PM · 모델
+/ml/                              @khy1121
+
+# 백엔드
+/backend/                         @backend-owner
+
+# 프론트엔드
+/frontend/                        @frontend-owner
+
+# 카메라 · 음성 (프론트 하위 폴더, 프론트 규칙보다 우선)
+/frontend/src/features/camera/    @camera-voice-owner
+/frontend/src/features/voice/     @camera-voice-owner
+
+# 디바이스 · 인프라
+/device/                          @device-infra-owner
+/docker-compose.yml               @device-infra-owner
+/.github/                         @device-infra-owner @khy1121
+
+# 문서는 팀장 검토
+/docs/                            @khy1121
